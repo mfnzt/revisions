@@ -293,6 +293,53 @@
       grid-template-columns: 1fr;
     }
   }
+
+  #versionDisplay {
+    position: fixed;
+    bottom: 12px;
+    right: 12px;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  #debugLog {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 12px;
+    margin-top: 16px;
+    max-height: 300px;
+    overflow-y: auto;
+    font-size: 12px;
+    font-family: monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .debug-entry {
+    margin-bottom: 8px;
+    padding: 4px;
+    border-left: 3px solid var(--color-border);
+    padding-left: 8px;
+  }
+
+  .debug-entry.info {
+    border-left-color: var(--color-primary);
+  }
+
+  .debug-entry.success {
+    border-left-color: var(--color-success);
+  }
+
+  .debug-entry.error {
+    border-left-color: var(--color-critical);
+  }
+
+  .debug-entry.warning {
+    border-left-color: var(--color-accent);
+  }
 </style>
 
 <div id="app">
@@ -350,7 +397,10 @@
     </div>
 
     <div id="ocr-tab" class="tab-content">
-      <h2>📸 Importer du collège</h2>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h2 style="margin: 0;">📸 Importer du collège</h2>
+        <button class="btn-secondary" onclick="toggleDebugMode()" style="padding: 6px 12px; font-size: 12px;">🔧 Debug</button>
+      </div>
       <p style="color: var(--color-text-secondary); font-size: 14px; margin-bottom: 16px;">Prends une capture d'écran de l'emploi du temps et laisse-moi extraire tes cours</p>
 
       <div class="form-group">
@@ -371,6 +421,8 @@
           <button class="btn-primary" style="flex: 1;" onclick="confirmOCR()">Ajouter tout</button>
         </div>
       </div>
+
+      <div id="debugLog" style="display: none;"></div>
     </div>
   </div>
 
@@ -382,7 +434,15 @@
     <h2>Historique</h2>
     <div id="historyContent"></div>
   </div>
+
+  <div id="versionDisplay">v1.5.0</div>
 </div>
+
+<script>
+const APP_VERSION = "1.5.0";
+const debugLogs = [];
+let debugModeEnabled = false;
+</script>
 
 <script>
 class App {
@@ -724,6 +784,9 @@ function previewOCRImage() {
 }
 
 async function startOCR() {
+  debugLogs.length = 0;
+  addDebugLog('Démarrage de l\'extraction OCR', 'info');
+
   const btn = document.getElementById('ocrStartBtn');
   btn.textContent = 'Extraction en cours...';
   btn.disabled = true;
@@ -731,23 +794,43 @@ async function startOCR() {
   try {
     const imgElement = document.getElementById('ocrImg');
     let text = '';
+    let extractionMethod = '';
+
+    // Check window.ai availability
+    const windowAIAvailable = !!(window.ai && window.ai.languageModel);
+    addDebugLog(`window.ai disponible: ${windowAIAvailable ? '✅ Oui' : '❌ Non'}`, windowAIAvailable ? 'success' : 'warning');
 
     // Try window.ai first (native browser AI)
-    if (window.ai && window.ai.languageModel) {
+    if (windowAIAvailable) {
       try {
         text = await extractWithWindowAI(imgElement.src);
-        console.log('✅ Extraction avec window.ai réussie');
+        extractionMethod = 'window.ai (IA native)';
+        addDebugLog(`✅ Extraction réussie avec ${extractionMethod}`, 'success');
       } catch (e) {
-        console.log('⚠️ window.ai indisponible, fallback sur Tesseract');
+        addDebugLog(`❌ Erreur window.ai: ${e.message}`, 'error');
+        addDebugLog('Fallback sur Tesseract.js', 'warning');
         text = await extractWithTesseract(imgElement.src);
+        extractionMethod = 'Tesseract.js (fallback)';
+        addDebugLog(`✅ Extraction réussie avec ${extractionMethod}`, 'success');
       }
     } else {
       text = await extractWithTesseract(imgElement.src);
+      extractionMethod = 'Tesseract.js (seul disponible)';
+      addDebugLog(`✅ Extraction réussie avec ${extractionMethod}`, 'success');
     }
+
+    addDebugLog(`Texte brut extrait (${text.length} caractères):`, 'info');
+    addDebugLog(text.substring(0, 300) + (text.length > 300 ? '...' : ''), 'info');
 
     ocrParsedCourses = parseOCRFormat(text);
 
+    addDebugLog(`${ocrParsedCourses.length} cours parsés:`, 'info');
+    ocrParsedCourses.forEach((course, idx) => {
+      addDebugLog(`  ${idx + 1}. [${course.date}] ${course.subject}: ${course.content.substring(0, 50)}...`, 'info');
+    });
+
     if (ocrParsedCourses.length === 0) {
+      addDebugLog('❌ Aucun cours trouvé. Vérifie le format', 'error');
       alert('Aucun cours trouvé. Vérifie que le format est correct.');
       btn.textContent = 'Extraire les cours';
       btn.disabled = false;
@@ -760,12 +843,21 @@ async function startOCR() {
     }));
 
     ocrParsedCourses = withDuplicates;
+
+    const duplicateCount = ocrParsedCourses.filter(c => c.isDuplicate).length;
+    if (duplicateCount > 0) {
+      addDebugLog(`⚠️ ${duplicateCount} doublon(s) détecté(s)`, 'warning');
+    }
+
     displayOCRResults(ocrParsedCourses);
 
     document.getElementById('ocrPreview').style.display = 'none';
     document.getElementById('ocrResults').style.display = 'block';
+
+    addDebugLog('✅ Extraction terminée avec succès', 'success');
   } catch (err) {
-    console.error('OCR Error:', err);
+    addDebugLog(`❌ Erreur OCR: ${err.message}`, 'error');
+    addDebugLog(err.stack, 'error');
     alert('Erreur lors de l\'extraction. Réessaye avec une meilleure image.');
     btn.textContent = 'Extraire les cours';
     btn.disabled = false;
@@ -773,7 +865,11 @@ async function startOCR() {
 }
 
 async function extractWithWindowAI(imageSrc) {
+  addDebugLog('Appel à window.ai.languageModel.create()', 'info');
+
   const session = await window.ai.languageModel.create();
+  addDebugLog('Session créée avec succès', 'success');
+
   const prompt = `Analyse cette capture d'écran d'emploi du temps du collège et extrais EXACTEMENT le texte visible.
 
 Important:
@@ -781,13 +877,25 @@ Important:
 - Utilise exactement le même texte que sur l'image
 - Inclus les états "Fait" ou "Non Fait" s'ils sont présents
 - Retourne UNIQUEMENT le texte, sans modification`;
+
+  addDebugLog('Envoi du prompt à window.ai', 'info');
   const response = await session.prompt(prompt);
   session.destroy();
+
+  if (!response || response.trim().length === 0) {
+    addDebugLog('⚠️ window.ai a retourné une réponse vide', 'warning');
+  }
+
   return response;
 }
 
 async function extractWithTesseract(imageSrc) {
+  addDebugLog('Démarrage Tesseract.js...', 'info');
+
   const result = await Tesseract.recognize(imageSrc, 'fra');
+
+  addDebugLog(`Tesseract terminé. Confiance: ${(result.data.confidence || 0).toFixed(1)}%`, 'info');
+
   return result.data.text;
 }
 
@@ -902,6 +1010,54 @@ function cancelOCR() {
   document.getElementById('ocrPreview').style.display = 'none';
   document.getElementById('ocrResults').style.display = 'none';
   ocrParsedCourses = [];
+}
+
+// ========== DEBUG SYSTEM ==========
+function addDebugLog(message, type = 'info') {
+  const entry = {
+    timestamp: new Date().toLocaleTimeString('fr-FR'),
+    type,
+    message
+  };
+  debugLogs.push(entry);
+  console.log(`[${type.toUpperCase()}] ${message}`);
+
+  if (debugModeEnabled) {
+    renderDebugLog();
+  }
+}
+
+function renderDebugLog() {
+  const logEl = document.getElementById('debugLog');
+  let html = '<strong>📋 Debug Log:</strong><br>';
+
+  debugLogs.forEach(log => {
+    const emoji = {
+      'info': 'ℹ️',
+      'success': '✅',
+      'error': '❌',
+      'warning': '⚠️'
+    }[log.type] || '•';
+
+    html += `<div class="debug-entry ${log.type}">${emoji} [${log.timestamp}] ${log.message}</div>`;
+  });
+
+  logEl.innerHTML = html;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function toggleDebugMode() {
+  debugModeEnabled = !debugModeEnabled;
+  const logEl = document.getElementById('debugLog');
+
+  if (debugModeEnabled) {
+    logEl.style.display = 'block';
+    addDebugLog('Mode Debug activé', 'info');
+    addDebugLog(`App version: ${APP_VERSION}`, 'info');
+  } else {
+    logEl.style.display = 'none';
+    addDebugLog('Mode Debug désactivé', 'info');
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
