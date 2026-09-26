@@ -774,7 +774,13 @@ async function startOCR() {
 
 async function extractWithWindowAI(imageSrc) {
   const session = await window.ai.languageModel.create();
-  const prompt = 'Analyse cette capture d\'écran d\'emploi du temps scolaire et extrais les cours. Format: Pour [DATE]\n- [MATIERE]\n  [Description]. Retourne UNIQUEMENT le texte dans ce format.';
+  const prompt = `Analyse cette capture d'écran d'emploi du temps du collège et extrais EXACTEMENT le texte visible.
+
+Important:
+- Garde le format original (dates avec "Pour JOUR DATE", barres colorées avant matières, descriptions, états)
+- Utilise exactement le même texte que sur l'image
+- Inclus les états "Fait" ou "Non Fait" s'ils sont présents
+- Retourne UNIQUEMENT le texte, sans modification`;
   const response = await session.prompt(prompt);
   session.destroy();
   return response;
@@ -789,20 +795,49 @@ function parseOCRFormat(text) {
   const lines = text.split('\n');
   const courses = [];
   let currentDate = null;
+  let i = 0;
 
-  for (let i = 0; i < lines.length; i++) {
+  while (i < lines.length) {
     const line = lines[i].trim();
+    i++;
 
-    if (line.toLowerCase().startsWith('pour ')) {
-      currentDate = line.substring(4).trim();
+    // Détecter les dates: "Pour JOUR DATE" (ex: "Pour mardi 29 sept.")
+    const dateMatch = line.match(/Pour\s+(\w+\s+\d{1,2}\s+\w+\.?)/i);
+    if (dateMatch) {
+      currentDate = dateMatch[1].replace(/\.$/, '');
+      continue;
     }
-    else if (line.startsWith('-') && currentDate) {
-      const subject = line.substring(1).trim();
-      let description = '';
 
-      if (i + 1 < lines.length && !lines[i + 1].trim().startsWith('-') && !lines[i + 1].trim().toLowerCase().startsWith('pour')) {
-        description = lines[i + 1].trim();
+    // Ignorer les lignes vides, les états, les fichiers
+    if (!line || /^(Fait|Non Fait)$/i.test(line) || /\.(pdf|xlsx|docx|txt)$/i.test(line)) {
+      continue;
+    }
+
+    // Extraire matière (après barres colorées)
+    const subjectMatch = line.match(/^[\s│├─|●◆▪▌]*([A-Z][A-Z0-9\s-]+?)(?:\s+(Fait|Non Fait))?$/);
+    if (subjectMatch && currentDate) {
+      const subject = subjectMatch[1].trim();
+      const descLines = [];
+
+      // Collecter les descriptions (lignes suivantes)
+      while (i < lines.length) {
+        const nextLine = lines[i].trim();
+
+        // Stop si nouvelle date ou nouvelle matière ou état
+        if (!nextLine || /^Pour\s+/i.test(nextLine) || /^[\s│├─|●◆▪▌]*[A-Z][A-Z0-9\s-]+/.test(nextLine) || /^(Fait|Non Fait)$/.test(nextLine)) {
+          break;
+        }
+
+        // Ignorer les fichiers
+        if (!/\.(pdf|xlsx|docx|txt)$/i.test(nextLine)) {
+          descLines.push(nextLine);
+        }
+
+        i++;
       }
+
+      // Joindre les descriptions
+      const description = descLines.filter(l => l).join(' ').trim();
 
       if (subject) {
         courses.push({
