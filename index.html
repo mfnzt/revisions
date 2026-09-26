@@ -965,6 +965,7 @@ function checkDuplicate(course) {
   return app.items.some(item => {
     if (item.type !== 'daily') return false;
     return item.subject.toLowerCase() === course.subject.toLowerCase() &&
+           item.content.toLowerCase() === course.content.toLowerCase() &&
            item.createdDate === course.date;
   });
 }
