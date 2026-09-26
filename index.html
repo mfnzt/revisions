@@ -461,7 +461,7 @@
 </div>
 
 <script>
-const APP_VERSION = "1.5.6";
+const APP_VERSION = "1.5.7";
 const debugLogs = [];
 let debugModeEnabled = false;
 </script>
@@ -482,7 +482,8 @@ class App {
     this.stats = this.loadData('stats') || {
       points: 0,
       streak: 0,
-      lastReviewDate: null
+      lastReviewDate: null,
+      lastStreakCheckDate: null
     };
     this.init();
   }
@@ -518,8 +519,13 @@ class App {
   }
 
   addDays(dateStr, days) {
-    const d = new Date(dateStr + 'T00:00:00');
-    d.setDate(d.getDate() + days);
+    // Tout faire en UTC: construire la date via Date.UTC() et la relire
+    // avec les getters/toISOString UTC. Mélanger heure locale (new Date(str
+    // + 'T00:00:00')) et sérialisation UTC (toISOString) décale le résultat
+    // d'un jour dans tout fuseau horaire en avance sur UTC (ex: Europe/Paris).
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const d = new Date(Date.UTC(year, month - 1, day));
+    d.setUTCDate(d.getUTCDate() + days);
     return d.toISOString().split('T')[0];
   }
 
@@ -601,19 +607,26 @@ class App {
 
   updateStreak() {
     const today = new Date().toISOString().split('T')[0];
+
+    // Ne recalculer qu'une fois par jour calendaire, pas à chaque
+    // navigation/reload (sinon le streak gonfle tant qu'aucune review
+    // n'a encore eu lieu aujourd'hui)
+    if (this.stats.lastStreakCheckDate === today) return;
+
     const last = this.stats.lastReviewDate;
-
-    if (last === today) return;
-
     const yesterday = this.addDays(today, -1);
-    if (last === yesterday) {
+
+    if (last === today) {
+      // Une review a déjà eu lieu aujourd'hui: le streak compte au moins 1
+      this.stats.streak = Math.max(this.stats.streak, 1);
+    } else if (last === yesterday) {
       this.stats.streak++;
     } else {
       this.stats.streak = 0;
     }
 
+    this.stats.lastStreakCheckDate = today;
     this.saveData('stats', this.stats);
-    this.render();
   }
 
   showFeedback(msg) {
@@ -753,7 +766,7 @@ function switchView(name) {
 
   if (name === 'dashboard') {
     app.updateStreak();
-    app.renderDashboard();
+    app.render();
   }
 }
 
