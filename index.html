@@ -344,6 +344,24 @@
   .debug-entry.warning {
     border-left-color: var(--color-accent);
   }
+
+  .debug-entry.raw-text {
+    background: #1a1a1a;
+    color: #00ff00;
+    border-left-color: var(--color-primary);
+    padding: 12px 8px;
+    margin: 12px 0;
+    border-radius: 4px;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  @media (prefers-color-scheme: light) {
+    .debug-entry.raw-text {
+      background: #f5f5f5;
+      color: #333;
+    }
+  }
 </style>
 
 <div id="app">
@@ -443,7 +461,7 @@
 </div>
 
 <script>
-const APP_VERSION = "1.5.2";
+const APP_VERSION = "1.5.3";
 const debugLogs = [];
 let debugModeEnabled = false;
 </script>
@@ -798,33 +816,20 @@ async function startOCR() {
   try {
     const imgElement = document.getElementById('ocrImg');
     let text = '';
-    let extractionMethod = '';
+    const startTime = performance.now();
 
-    // Check window.ai availability
-    const windowAIAvailable = !!(window.ai && window.ai.languageModel);
-    addDebugLog(`window.ai disponible: ${windowAIAvailable ? '✅ Oui' : '❌ Non'}`, windowAIAvailable ? 'success' : 'warning');
+    addDebugLog('✅ Tesseract.js disponible', 'success');
+    text = await extractWithTesseract(imgElement.src);
 
-    // Try window.ai first (native browser AI)
-    if (windowAIAvailable) {
-      try {
-        text = await extractWithWindowAI(imgElement.src);
-        extractionMethod = 'window.ai (IA native)';
-        addDebugLog(`✅ Extraction réussie avec ${extractionMethod}`, 'success');
-      } catch (e) {
-        addDebugLog(`❌ Erreur window.ai: ${e.message}`, 'error');
-        addDebugLog('Fallback sur Tesseract.js', 'warning');
-        text = await extractWithTesseract(imgElement.src);
-        extractionMethod = 'Tesseract.js (fallback)';
-        addDebugLog(`✅ Extraction réussie avec ${extractionMethod}`, 'success');
-      }
-    } else {
-      text = await extractWithTesseract(imgElement.src);
-      extractionMethod = 'Tesseract.js (seul disponible)';
-      addDebugLog(`✅ Extraction réussie avec ${extractionMethod}`, 'success');
-    }
+    const endTime = performance.now();
+    const extractionTime = (endTime - startTime).toFixed(2);
+    addDebugLog(`✅ Extraction réussie avec Tesseract.js (${extractionTime}ms)`, 'success');
 
-    addDebugLog(`Texte brut extrait (${text.length} caractères):`, 'info');
-    addDebugLog(text.substring(0, 300) + (text.length > 300 ? '...' : ''), 'info');
+    // Afficher le texte complet brut
+    addDebugLog(`\n📋 TEXTE BRUT COMPLET (${text.length} caractères):\n`, 'info');
+    addDebugLog('─'.repeat(50), 'info');
+    addDebugLog(text, 'info');
+    addDebugLog('─'.repeat(50), 'info');
 
     ocrParsedCourses = parseOCRFormat(text);
 
@@ -866,31 +871,6 @@ async function startOCR() {
     btn.textContent = 'Extraire les cours';
     btn.disabled = false;
   }
-}
-
-async function extractWithWindowAI(imageSrc) {
-  addDebugLog('Appel à window.ai.languageModel.create()', 'info');
-
-  const session = await window.ai.languageModel.create();
-  addDebugLog('Session créée avec succès', 'success');
-
-  const prompt = `Analyse cette capture d'écran d'emploi du temps du collège et extrais EXACTEMENT le texte visible.
-
-Important:
-- Garde le format original (dates avec "Pour JOUR DATE", barres colorées avant matières, descriptions, états)
-- Utilise exactement le même texte que sur l'image
-- Inclus les états "Fait" ou "Non Fait" s'ils sont présents
-- Retourne UNIQUEMENT le texte, sans modification`;
-
-  addDebugLog('Envoi du prompt à window.ai', 'info');
-  const response = await session.prompt(prompt);
-  session.destroy();
-
-  if (!response || response.trim().length === 0) {
-    addDebugLog('⚠️ window.ai a retourné une réponse vide', 'warning');
-  }
-
-  return response;
 }
 
 async function extractWithTesseract(imageSrc) {
@@ -1044,7 +1024,12 @@ function renderDebugLog() {
       'warning': '⚠️'
     }[log.type] || '•';
 
-    html += `<div class="debug-entry ${log.type}">${emoji} [${log.timestamp}] ${log.message}</div>`;
+    // Si c'est une section de texte brut, l'afficher différemment
+    if (log.message.includes('─'.repeat(20))) {
+      html += `<div class="debug-entry raw-text">${log.message}</div>`;
+    } else {
+      html += `<div class="debug-entry ${log.type}">${emoji} [${log.timestamp}] ${log.message}</div>`;
+    }
   });
 
   logEl.innerHTML = html;
