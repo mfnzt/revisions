@@ -1,0 +1,880 @@
+<title>Révisions Scolaires</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
+
+<style>
+  /* Tokens */
+  :root {
+    --color-primary: #3B82F6;
+    --color-accent: #F59E0B;
+    --color-success: #10B981;
+    --color-critical: #EF4444;
+    --color-bg: #FFFFFF;
+    --color-surface: #F9FAFB;
+    --color-border: #E5E7EB;
+    --color-text-primary: #111827;
+    --color-text-secondary: #6B7280;
+
+    --font-display: "Poppins", system-ui, sans-serif;
+    --font-body: "Inter", system-ui, sans-serif;
+
+    --radius: 12px;
+    --gap: 16px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --color-bg: #111827;
+      --color-surface: #1F2937;
+      --color-border: #374151;
+      --color-text-primary: #F9FAFB;
+      --color-text-secondary: #D1D5DB;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --color-bg: #111827;
+    --color-surface: #1F2937;
+    --color-border: #374151;
+    --color-text-primary: #F9FAFB;
+    --color-text-secondary: #D1D5DB;
+    color-scheme: dark;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: 16px;
+    color: var(--color-text-primary);
+    background: var(--color-bg);
+    padding: 0 16px 16px 16px;
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    margin: 0 0 12px 0;
+  }
+
+  h1 { font-size: 28px; }
+  h2 { font-size: 20px; }
+  h3 { font-size: 18px; }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  header {
+    background: var(--color-primary);
+    color: white;
+    padding: 16px 0 12px 0;
+    margin: 0 -16px 16px -16px;
+    padding-left: 16px;
+    padding-right: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .badge {
+    background: rgba(255,255,255,0.3);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  nav {
+    display: flex;
+    gap: 8px;
+  }
+
+  button {
+    font-family: var(--font-body);
+    font-size: 16px;
+    padding: 12px 16px;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+
+  .btn-primary {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .btn-secondary {
+    background: var(--color-surface);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border);
+    padding: 8px 12px;
+    flex: 1;
+  }
+
+  .btn-success {
+    background: var(--color-success);
+    color: white;
+  }
+
+  .btn-danger {
+    background: var(--color-critical);
+    color: white;
+  }
+
+  .btn-large {
+    width: 100%;
+    min-height: 56px;
+    padding: 16px 24px;
+    font-size: 18px;
+  }
+
+  .btn-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+
+  .card-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .card-meta {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    margin-bottom: 4px;
+  }
+
+  .view {
+    display: none;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .view.active {
+    display: block;
+  }
+
+  .form-group {
+    margin-bottom: 16px;
+  }
+
+  label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 6px;
+    font-size: 14px;
+  }
+
+  input, textarea, select {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-family: var(--font-body);
+    font-size: 16px;
+    background: var(--color-bg);
+    color: var(--color-text-primary);
+  }
+
+  textarea {
+    min-height: 80px;
+    resize: vertical;
+  }
+
+  input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 24px;
+    color: var(--color-text-secondary);
+  }
+
+  .empty-state-emoji {
+    font-size: 48px;
+    margin-bottom: 16px;
+  }
+
+  .feedback {
+    position: fixed;
+    bottom: 24px;
+    left: 16px;
+    right: 16px;
+    background: var(--color-surface);
+    border: 2px solid var(--color-success);
+    border-radius: var(--radius);
+    padding: 16px;
+    text-align: center;
+    font-weight: 600;
+    animation: slideUp 0.3s ease-out;
+  }
+
+  @keyframes slideUp {
+    from {
+      transform: translateY(100px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .tabs button {
+    flex: 1;
+    padding: 8px 16px;
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-weight: 600;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .tabs button.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+  }
+
+  .tab-content {
+    display: none;
+  }
+
+  .tab-content.active {
+    display: block;
+  }
+
+  @media (max-width: 480px) {
+    h1 { font-size: 24px; }
+    .btn-group {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div id="app">
+  <header>
+    <div class="header-top">
+      <h1 style="color: white; margin: 0; font-size: 24px;">📚 Révisions</h1>
+      <div style="display: flex; gap: 8px;">
+        <div class="badge">🔥 <span id="streak">0</span></div>
+        <div class="badge">🎯 <span id="points">0</span></div>
+      </div>
+    </div>
+    <nav>
+      <button class="btn-secondary" onclick="switchView('dashboard')">Tableau</button>
+      <button class="btn-secondary" onclick="switchView('add')">+ Ajouter</button>
+      <button class="btn-secondary" onclick="switchView('history')">Historique</button>
+    </nav>
+  </header>
+
+  <div id="dashboard" class="view active">
+    <div id="todayReviews"></div>
+  </div>
+
+  <div id="add" class="view">
+    <div class="tabs">
+      <button class="active" onclick="switchTab('exam')">Examen</button>
+      <button onclick="switchTab('daily')">Cours du jour</button>
+      <button onclick="switchTab('ocr')">📸 OCR</button>
+    </div>
+
+    <div id="exam-tab" class="tab-content active">
+      <h2>Préparer un examen</h2>
+      <div class="form-group">
+        <label>Matière</label>
+        <input id="examSubject" type="text" placeholder="Ex: Mathématiques">
+      </div>
+      <div class="form-group">
+        <label>Date de l'examen</label>
+        <input id="examDate" type="date">
+      </div>
+      <button class="btn-primary btn-large" onclick="addExam()">Ajouter</button>
+    </div>
+
+    <div id="daily-tab" class="tab-content">
+      <h2>Relire le cours du jour</h2>
+      <p style="color: var(--color-text-secondary); font-size: 14px; margin-bottom: 16px;">Pour consolider ce que tu as appris aujourd'hui</p>
+      <div class="form-group">
+        <label>Matière</label>
+        <input id="dailySubject" type="text" placeholder="Ex: Mathématiques">
+      </div>
+      <div class="form-group">
+        <label>Chapitre/Contenu</label>
+        <textarea id="dailyContent" placeholder="Ex: Chapitre 5 - Les équations"></textarea>
+      </div>
+      <button class="btn-primary btn-large" onclick="addDaily()">Ajouter</button>
+    </div>
+
+    <div id="ocr-tab" class="tab-content">
+      <h2>📸 Importer du collège</h2>
+      <p style="color: var(--color-text-secondary); font-size: 14px; margin-bottom: 16px;">Prends une capture d'écran de l'emploi du temps et laisse-moi extraire tes cours</p>
+
+      <div class="form-group">
+        <label>Sélectionne une image</label>
+        <input id="ocrFile" type="file" accept="image/*" onchange="previewOCRImage()">
+      </div>
+
+      <div id="ocrPreview" style="display: none;">
+        <img id="ocrImg" style="max-width: 100%; border-radius: 12px; margin-bottom: 16px; max-height: 400px;">
+        <button class="btn-primary btn-large" onclick="startOCR()" id="ocrStartBtn">Extraire les cours</button>
+      </div>
+
+      <div id="ocrResults" style="display: none;">
+        <h3>Cours trouvés:</h3>
+        <div id="ocrList"></div>
+        <div style="display: flex; gap: 8px; margin-top: 16px;">
+          <button class="btn-secondary" style="flex: 1;" onclick="cancelOCR()">Annuler</button>
+          <button class="btn-primary" style="flex: 1;" onclick="confirmOCR()">Ajouter tout</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="revision" class="view">
+    <div id="revisionContent"></div>
+  </div>
+
+  <div id="history" class="view">
+    <h2>Historique</h2>
+    <div id="historyContent"></div>
+  </div>
+</div>
+
+<script>
+class App {
+  constructor() {
+    this.items = this.loadData('items') || [];
+    this.stats = this.loadData('stats') || {
+      points: 0,
+      streak: 0,
+      lastReviewDate: null
+    };
+    this.init();
+  }
+
+  init() {
+    this.updateStreak();
+    this.render();
+  }
+
+  loadData(key) {
+    try {
+      return JSON.parse(localStorage.getItem(key));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  saveData(key, data) {
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) {
+      console.error('Error saving:', e);
+    }
+  }
+
+  // SM-2 Algorithm
+  calculateNextInterval(reviewCount, difficulty) {
+    // 1=difficile, 2=bon, 3=facile
+    if (reviewCount === 0) return 1;
+    if (reviewCount === 1) return difficulty === 1 ? 1 : (difficulty === 2 ? 3 : 5);
+    if (reviewCount === 2) return difficulty === 1 ? 3 : (difficulty === 2 ? 7 : 10);
+    return difficulty === 1 ? 7 : (difficulty === 2 ? 14 : 21);
+  }
+
+  addDays(dateStr, days) {
+    const d = new Date(dateStr + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    return d.toISOString().split('T')[0];
+  }
+
+  getReviewsDue() {
+    const today = new Date().toISOString().split('T')[0];
+    const due = [];
+
+    this.items.forEach(item => {
+      let nextReviewDate;
+
+      if (!item.reviews) item.reviews = [];
+
+      if (item.reviews.length === 0) {
+        nextReviewDate = this.addDays(item.createdDate, 1);
+      } else {
+        const last = item.reviews[item.reviews.length - 1];
+        nextReviewDate = this.addDays(last.date, last.interval);
+      }
+
+      // Vérifier si révision est due
+      if (nextReviewDate <= today) {
+        // Pour examen, vérifier aussi que l'examen n'est pas passé
+        if (item.type === 'exam' && item.dueDate < today) {
+          return;
+        }
+
+        due.push({
+          id: item.id,
+          name: item.type === 'daily' ? item.subject : item.name,
+          content: item.content || item.name,
+          dueDate: item.dueDate || null,
+          item
+        });
+      }
+    });
+
+    // Trier: examen proches d'abord
+    due.sort((a, b) => {
+      if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+      if (a.dueDate) return -1;
+      return 1;
+    });
+
+    return due.slice(0, 30);
+  }
+
+  completeReview(itemId, difficulty) {
+    const item = this.items.find(i => i.id === itemId);
+    if (!item) return;
+
+    if (!item.reviews) item.reviews = [];
+
+    const review = {
+      date: new Date().toISOString().split('T')[0],
+      difficulty,
+      interval: this.calculateNextInterval(item.reviews.length, difficulty)
+    };
+
+    item.reviews.push(review);
+
+    // Points
+    const pts = difficulty === 3 ? 10 : (difficulty === 2 ? 5 : 2);
+    this.stats.points += pts;
+
+    // Streak
+    const today = new Date().toISOString().split('T')[0];
+    this.stats.lastReviewDate = today;
+
+    this.saveData('items', this.items);
+    this.saveData('stats', this.stats);
+
+    const msg = difficulty === 3 ? '🎉 Excellent! +10 pts' :
+                difficulty === 2 ? '👍 C\'est bon! +5 pts' :
+                '💪 Allez! +2 pts';
+    this.showFeedback(msg);
+
+    setTimeout(() => switchView('dashboard'), 1500);
+  }
+
+  updateStreak() {
+    const today = new Date().toISOString().split('T')[0];
+    const last = this.stats.lastReviewDate;
+
+    if (last === today) return;
+
+    const yesterday = this.addDays(today, -1);
+    if (last === yesterday) {
+      this.stats.streak++;
+    } else {
+      this.stats.streak = 0;
+    }
+
+    this.saveData('stats', this.stats);
+    this.render();
+  }
+
+  showFeedback(msg) {
+    const el = document.createElement('div');
+    el.className = 'feedback';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+  }
+
+  addExam(name, dueDate) {
+    this.items.push({
+      id: Date.now().toString(),
+      type: 'exam',
+      name,
+      dueDate,
+      createdDate: new Date().toISOString().split('T')[0],
+      reviews: []
+    });
+    this.saveData('items', this.items);
+  }
+
+  addDaily(subject, content) {
+    this.items.push({
+      id: Date.now().toString(),
+      type: 'daily',
+      subject,
+      content,
+      createdDate: new Date().toISOString().split('T')[0],
+      reviews: []
+    });
+    this.saveData('items', this.items);
+  }
+
+  deleteItem(id) {
+    this.items = this.items.filter(i => i.id !== id);
+    this.saveData('items', this.items);
+  }
+
+  render() {
+    document.getElementById('streak').textContent = this.stats.streak;
+    document.getElementById('points').textContent = this.stats.points;
+    this.renderDashboard();
+    this.renderHistory();
+  }
+
+  renderDashboard() {
+    const due = this.getReviewsDue();
+    const container = document.getElementById('todayReviews');
+
+    if (due.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-emoji">✨</div>
+          <h3>Parfait!</h3>
+          <p>Aucune révision pour aujourd'hui</p>
+        </div>
+      `;
+      return;
+    }
+
+    let html = `<h2>${due.length} révision${due.length > 1 ? 's' : ''}</h2>`;
+    due.forEach(rev => {
+      const dateText = rev.dueDate ? `<div class="card-meta">Examen: ${this.formatDate(rev.dueDate)}</div>` : '';
+      html += `
+        <div class="card">
+          <div class="card-title">${rev.name}</div>
+          <div class="card-meta">${rev.content}</div>
+          ${dateText}
+          <button class="btn-primary" onclick="app.startRevision('${rev.id}')" style="width: 100%; margin-top: 12px;">Réviser</button>
+        </div>
+      `;
+    });
+    container.innerHTML = html;
+  }
+
+  renderHistory() {
+    const done = this.items.filter(i => i.reviews && i.reviews.length > 0);
+    const container = document.getElementById('historyContent');
+
+    if (done.length === 0) {
+      container.innerHTML = '<p>Aucune révision complétée</p>';
+      return;
+    }
+
+    let html = '';
+    done.forEach(item => {
+      const last = item.reviews[item.reviews.length - 1];
+      const name = item.type === 'daily' ? item.subject : item.name;
+      html += `
+        <div class="card">
+          <div class="card-title">${name}</div>
+          <div class="card-meta">Révisions: ${item.reviews.length}</div>
+          <div class="card-meta">Dernière: ${this.formatDate(last.date)}</div>
+          <button class="btn-secondary" onclick="app.deleteItem('${item.id}'); app.render();" style="width: 100%; margin-top: 8px;">Supprimer</button>
+        </div>
+      `;
+    });
+    container.innerHTML = html;
+  }
+
+  formatDate(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('fr-FR', { month: 'short', day: 'numeric' });
+  }
+
+  startRevision(itemId) {
+    const due = this.getReviewsDue();
+    const rev = due.find(r => r.id === itemId);
+    if (!rev) return;
+
+    const html = `
+      <div style="text-align: center; padding: 24px 0;">
+        <h2>${rev.name}</h2>
+        <div class="card" style="margin: 24px 0; min-height: 200px; display: flex; align-items: center; justify-content: center;">
+          <div>${rev.content}</div>
+        </div>
+        <p style="color: var(--color-text-secondary); margin-bottom: 24px;">As-tu bien révisé?</p>
+      </div>
+      <div class="btn-group">
+        <button class="btn-danger btn-large" onclick="app.completeReview('${rev.id}', 1)">🔴<br>Difficile</button>
+        <button class="btn-secondary btn-large" onclick="app.completeReview('${rev.id}', 2)">🟡<br>Bon</button>
+        <button class="btn-success btn-large" onclick="app.completeReview('${rev.id}', 3)">🟢<br>Facile</button>
+      </div>
+    `;
+    document.getElementById('revisionContent').innerHTML = html;
+    switchView('revision');
+  }
+}
+
+let app;
+
+function switchView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById(name).classList.add('active');
+
+  if (name === 'dashboard') {
+    app.updateStreak();
+    app.renderDashboard();
+  }
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+
+  document.getElementById(name + '-tab').classList.add('active');
+  event.target.classList.add('active');
+}
+
+function addExam() {
+  const name = document.getElementById('examSubject').value;
+  const date = document.getElementById('examDate').value;
+
+  if (!name || !date) {
+    alert('Remplis tous les champs!');
+    return;
+  }
+
+  app.addExam(name, date);
+  app.showFeedback('✅ Examen ajouté!');
+  document.getElementById('examSubject').value = '';
+  document.getElementById('examDate').value = '';
+
+  setTimeout(() => switchView('dashboard'), 1500);
+}
+
+function addDaily() {
+  const subject = document.getElementById('dailySubject').value;
+  const content = document.getElementById('dailyContent').value;
+
+  if (!subject || !content) {
+    alert('Remplis tous les champs!');
+    return;
+  }
+
+  app.addDaily(subject, content);
+  app.showFeedback('✅ Cours ajouté!');
+  document.getElementById('dailySubject').value = '';
+  document.getElementById('dailyContent').value = '';
+
+  setTimeout(() => switchView('dashboard'), 1500);
+}
+
+// ========== OCR FUNCTIONS ==========
+let ocrParsedCourses = [];
+
+function previewOCRImage() {
+  const file = document.getElementById('ocrFile').files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('ocrImg').src = e.target.result;
+    document.getElementById('ocrPreview').style.display = 'block';
+    document.getElementById('ocrResults').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function startOCR() {
+  const btn = document.getElementById('ocrStartBtn');
+  btn.textContent = 'Extraction en cours...';
+  btn.disabled = true;
+
+  try {
+    const imgElement = document.getElementById('ocrImg');
+    let text = '';
+
+    // Try window.ai first (native browser AI)
+    if (window.ai && window.ai.languageModel) {
+      try {
+        text = await extractWithWindowAI(imgElement.src);
+        console.log('✅ Extraction avec window.ai réussie');
+      } catch (e) {
+        console.log('⚠️ window.ai indisponible, fallback sur Tesseract');
+        text = await extractWithTesseract(imgElement.src);
+      }
+    } else {
+      text = await extractWithTesseract(imgElement.src);
+    }
+
+    ocrParsedCourses = parseOCRFormat(text);
+
+    if (ocrParsedCourses.length === 0) {
+      alert('Aucun cours trouvé. Vérifie que le format est correct.');
+      btn.textContent = 'Extraire les cours';
+      btn.disabled = false;
+      return;
+    }
+
+    const withDuplicates = ocrParsedCourses.map(course => ({
+      ...course,
+      isDuplicate: checkDuplicate(course)
+    }));
+
+    ocrParsedCourses = withDuplicates;
+    displayOCRResults(ocrParsedCourses);
+
+    document.getElementById('ocrPreview').style.display = 'none';
+    document.getElementById('ocrResults').style.display = 'block';
+  } catch (err) {
+    console.error('OCR Error:', err);
+    alert('Erreur lors de l\'extraction. Réessaye avec une meilleure image.');
+    btn.textContent = 'Extraire les cours';
+    btn.disabled = false;
+  }
+}
+
+async function extractWithWindowAI(imageSrc) {
+  const session = await window.ai.languageModel.create();
+  const prompt = 'Analyse cette capture d\'écran d\'emploi du temps scolaire et extrais les cours. Format: Pour [DATE]\n- [MATIERE]\n  [Description]. Retourne UNIQUEMENT le texte dans ce format.';
+  const response = await session.prompt(prompt);
+  session.destroy();
+  return response;
+}
+
+async function extractWithTesseract(imageSrc) {
+  const result = await Tesseract.recognize(imageSrc, 'fra');
+  return result.data.text;
+}
+
+function parseOCRFormat(text) {
+  const lines = text.split('\n');
+  const courses = [];
+  let currentDate = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+
+    if (line.toLowerCase().startsWith('pour ')) {
+      currentDate = line.substring(4).trim();
+    }
+    else if (line.startsWith('-') && currentDate) {
+      const subject = line.substring(1).trim();
+      let description = '';
+
+      if (i + 1 < lines.length && !lines[i + 1].trim().startsWith('-') && !lines[i + 1].trim().toLowerCase().startsWith('pour')) {
+        description = lines[i + 1].trim();
+      }
+
+      if (subject) {
+        courses.push({
+          date: currentDate,
+          subject: subject,
+          content: description || subject,
+          id: `ocr-${Date.now()}-${Math.random()}`
+        });
+      }
+    }
+  }
+
+  return courses;
+}
+
+function checkDuplicate(course) {
+  return app.items.some(item => {
+    if (item.type !== 'daily') return false;
+    return item.subject.toLowerCase() === course.subject.toLowerCase() &&
+           item.createdDate === course.date;
+  });
+}
+
+function displayOCRResults(courses) {
+  const list = document.getElementById('ocrList');
+  let html = '';
+
+  courses.forEach((course, idx) => {
+    const warningClass = course.isDuplicate ? 'border-left: 4px solid #EF4444;' : '';
+    const warningText = course.isDuplicate ? '⚠️ Doublon détecté' : '';
+
+    html += `
+      <div class="card" style="${warningClass}">
+        <div class="card-title">${course.subject}</div>
+        <div class="card-meta">Date: ${course.date}</div>
+        <div class="card-meta">${course.content}</div>
+        ${warningText ? `<div style="color: #EF4444; font-weight: 600; margin-top: 8px;">${warningText}</div>` : ''}
+      </div>
+    `;
+  });
+
+  list.innerHTML = html;
+}
+
+function confirmOCR() {
+  ocrParsedCourses.forEach(course => {
+    app.addDaily(course.subject, course.content);
+  });
+
+  app.showFeedback(`✅ ${ocrParsedCourses.length} cours ajoutés!`);
+
+  document.getElementById('ocrFile').value = '';
+  document.getElementById('ocrPreview').style.display = 'none';
+  document.getElementById('ocrResults').style.display = 'none';
+  ocrParsedCourses = [];
+
+  setTimeout(() => switchView('dashboard'), 1500);
+}
+
+function cancelOCR() {
+  document.getElementById('ocrFile').value = '';
+  document.getElementById('ocrPreview').style.display = 'none';
+  document.getElementById('ocrResults').style.display = 'none';
+  ocrParsedCourses = [];
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  app = new App();
+
+  // Set default date to 7 days from now
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 7);
+  document.getElementById('examDate').value = tomorrow.toISOString().split('T')[0];
+});
+</script>
