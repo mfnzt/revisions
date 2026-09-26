@@ -461,7 +461,7 @@
 </div>
 
 <script>
-const APP_VERSION = "1.5.3";
+const APP_VERSION = "1.5.4";
 const debugLogs = [];
 let debugModeEnabled = false;
 </script>
@@ -627,13 +627,14 @@ class App {
     this.saveData('items', this.items);
   }
 
-  addDaily(subject, content) {
+  addDaily(subject, content, sourceDate = null) {
     this.items.push({
       id: Date.now().toString(),
       type: 'daily',
       subject,
       content,
       createdDate: new Date().toISOString().split('T')[0],
+      sourceDate,
       reviews: []
     });
     this.saveData('items', this.items);
@@ -846,12 +847,7 @@ async function startOCR() {
       return;
     }
 
-    const withDuplicates = ocrParsedCourses.map(course => ({
-      ...course,
-      isDuplicate: checkDuplicate(course)
-    }));
-
-    ocrParsedCourses = withDuplicates;
+    ocrParsedCourses = annotateDuplicatesForPreview(ocrParsedCourses);
 
     const duplicateCount = ocrParsedCourses.filter(c => c.isDuplicate).length;
     if (duplicateCount > 0) {
@@ -883,64 +879,65 @@ async function extractWithTesseract(imageSrc) {
   return result.data.text;
 }
 
+// Reconnaissance PURE: extrait les cours du texte OCR, sans aucune notion de doublon.
+// Une ligne de cours est reconnue par son SUFFIXE ("Fait"/"Non Fait"), pas par son
+// préfixe (majuscules), pour ne pas confondre une description qui commence par des
+// majuscules (ex: "DS sur le chapitre...") avec une nouvelle matière.
 function parseOCRFormat(text) {
-  const lines = text.split('\n');
+  const lines = text.split('\n').map(l => l.trim());
   const courses = [];
   let currentDate = null;
-  let i = 0;
+  let currentCourse = null;
 
-  while (i < lines.length) {
-    const line = lines[i].trim();
-    i++;
+  const dateRegex = /^Pour\s+(.+?)\.?\s*$/i;
+  const courseRegex = /^[|│├─●◆▪▌]?\s*(.+?)\s+(Non\s*Fait|Fait)\s*$/i;
+  const standaloneStateRegex = /^(Non\s*Fait|Fait)$/i;
 
-    // Détecter les dates: "Pour JOUR DATE" (ex: "Pour mardi 29 sept.")
-    const dateMatch = line.match(/Pour\s+(\w+\s+\d{1,2}\s+\w+\.?)/i);
-    if (dateMatch) {
-      currentDate = dateMatch[1].replace(/\.$/, '');
-      continue;
-    }
-
-    // Ignorer les lignes vides, les états, les fichiers
-    if (!line || /^(Fait|Non Fait)$/i.test(line) || /\.(pdf|xlsx|docx|txt)$/i.test(line)) {
-      continue;
-    }
-
-    // Extraire matière (après barres colorées)
-    const subjectMatch = line.match(/^[\s│├─|●◆▪▌]*([A-Z][A-Z0-9\s-]+?)(?:\s+(Fait|Non Fait))?$/);
-    if (subjectMatch && currentDate) {
-      const subject = subjectMatch[1].trim();
-      const descLines = [];
-
-      // Collecter les descriptions (lignes suivantes)
-      while (i < lines.length) {
-        const nextLine = lines[i].trim();
-
-        // Stop si nouvelle date ou nouvelle matière ou état
-        if (!nextLine || /^Pour\s+/i.test(nextLine) || /^[\s│├─|●◆▪▌]*[A-Z][A-Z0-9\s-]+/.test(nextLine) || /^(Fait|Non Fait)$/.test(nextLine)) {
-          break;
-        }
-
-        // Ignorer les fichiers
-        if (!/\.(pdf|xlsx|docx|txt)$/i.test(nextLine)) {
-          descLines.push(nextLine);
-        }
-
-        i++;
-      }
-
-      // Joindre les descriptions
-      const description = descLines.filter(l => l).join(' ').trim();
-
-      if (subject) {
-        courses.push({
-          date: currentDate,
-          subject: subject,
-          content: description || subject,
-          id: `ocr-${Date.now()}-${Math.random()}`
-        });
-      }
+  function finalizeCourse() {
+    if (currentCourse) {
+      courses.push({
+        date: currentCourse.date,
+        subject: currentCourse.subject,
+        content: currentCourse.contentLines.filter(l => l).join(' ').trim(),
+        id: `ocr-${Date.now()}-${Math.random()}`
+      });
+      currentCourse = null;
     }
   }
+
+  for (const line of lines) {
+    if (!line) continue;
+
+    const dateMatch = line.match(dateRegex);
+    if (dateMatch) {
+      finalizeCourse();
+      currentDate = dateMatch[1].trim();
+      continue;
+    }
+
+    const courseMatch = line.match(courseRegex);
+    if (courseMatch && currentDate) {
+      finalizeCourse();
+      currentCourse = {
+        date: currentDate,
+        subject: courseMatch[1].trim(),
+        contentLines: []
+      };
+      continue;
+    }
+
+    // Artefact OCR: état seul sur sa ligne, sans matière → ignoré
+    if (standaloneStateRegex.test(line)) {
+      continue;
+    }
+
+    // Toute autre ligne fait partie du contenu du cours courant
+    if (currentCourse) {
+      currentCourse.contentLines.push(line);
+    }
+  }
+
+  finalizeCourse();
 
   return courses;
 }
@@ -950,8 +947,56 @@ function checkDuplicate(course) {
     if (item.type !== 'daily') return false;
     return item.subject.toLowerCase() === course.subject.toLowerCase() &&
            item.content.toLowerCase() === course.content.toLowerCase() &&
-           item.createdDate === course.date;
+           item.sourceDate === course.date;
   });
+}
+
+// Annote les cours avec isDuplicate pour l'AFFICHAGE uniquement (avertissement visuel).
+// Ne filtre rien: purement informatif. La vraie décision de dédoublonnage est prise
+// par addOCRCourses() au moment de l'ajout.
+function annotateDuplicatesForPreview(courses) {
+  const seen = [];
+  return courses.map(course => {
+    const isDupWithinBatch = seen.some(s =>
+      s.subject.toLowerCase() === course.subject.toLowerCase() &&
+      s.content.toLowerCase() === course.content.toLowerCase() &&
+      s.date === course.date
+    );
+    seen.push(course);
+    return {
+      ...course,
+      isDuplicate: isDupWithinBatch || checkDuplicate(course)
+    };
+  });
+}
+
+// Dédoublonnage AUTORITATIF au moment de l'ajout: intra-batch puis contre app.items.
+// C'est le seul endroit qui décide réellement ce qui est sauvegardé, ce qui évite
+// les doublons même si l'OCR est relancé plusieurs fois sur la même image.
+function addOCRCourses(courses) {
+  const uniqueBatch = [];
+  courses.forEach(course => {
+    const isDupWithinBatch = uniqueBatch.some(u =>
+      u.subject.toLowerCase() === course.subject.toLowerCase() &&
+      u.content.toLowerCase() === course.content.toLowerCase() &&
+      u.date === course.date
+    );
+    if (!isDupWithinBatch) uniqueBatch.push(course);
+  });
+
+  let addedCount = 0;
+  let skippedCount = 0;
+
+  uniqueBatch.forEach(course => {
+    if (checkDuplicate(course)) {
+      skippedCount++;
+    } else {
+      app.addDaily(course.subject, course.content, course.date);
+      addedCount++;
+    }
+  });
+
+  return { addedCount, skippedCount };
 }
 
 function displayOCRResults(courses) {
@@ -976,11 +1021,13 @@ function displayOCRResults(courses) {
 }
 
 function confirmOCR() {
-  ocrParsedCourses.forEach(course => {
-    app.addDaily(course.subject, course.content);
-  });
+  const { addedCount, skippedCount } = addOCRCourses(ocrParsedCourses);
 
-  app.showFeedback(`✅ ${ocrParsedCourses.length} cours ajoutés!`);
+  let message = `✅ ${addedCount} cours ajouté${addedCount > 1 ? 's' : ''}!`;
+  if (skippedCount > 0) {
+    message += ` (${skippedCount} doublon${skippedCount > 1 ? 's' : ''} ignoré${skippedCount > 1 ? 's' : ''})`;
+  }
+  app.showFeedback(message);
 
   document.getElementById('ocrFile').value = '';
   document.getElementById('ocrPreview').style.display = 'none';
