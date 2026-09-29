@@ -13,41 +13,28 @@ Une application web moderne pour aider les ados à réviser intelligemment avec 
 3. Complétez les révisions quotidiennes
 4. Consultez votre progression
 
-## 📋 Phases
+## 📋 État d'avancement
 
-### Phase 1 ✅
-- MVP : Formulaires + SM-2 + Gamification
-- Modes : Examen (avec date) et Cours du jour
-
-### Phase 1.5 ✅
-- OCR : window.ai + Tesseract fallback
-- Import automatique depuis captures d'écran
-
-### Phase 2 ⏳
-- Notifications push
-- Graphique de progression
-
-### Phase 3 ⏳
-- Badges déblocables
-- Export/Import données
-- Thème dark
+Voir [ROADMAP.md](ROADMAP.md) pour les fonctionnalités à venir et
+[CHANGELOG.md](CHANGELOG.md) pour l'historique complet des versions.
 
 ## 🛠️ Tech Stack
 
 - **Frontend** : HTML5 + CSS3 + JavaScript vanilla
 - **Storage** : LocalStorage (~10MB)
-- **OCR** : window.ai (priorité) + Tesseract.js (fallback)
+- **OCR** : Tesseract.js
 - **Framework** : Aucun (zéro dépendances)
 
 ## 📱 Compatibilité
 
-- Chrome/Edge (pour window.ai)
-- Firefox, Safari (Tesseract fallback)
+- Chrome/Edge, Firefox, Safari
 - Mobile ready
 
 ## 📖 Docs
 
-Voir `/.claude/plans/` pour le plan détaillé d'implémentation.
+- [CLAUDE.md](CLAUDE.md) : contexte projet et architecture (pour Claude Code)
+- [CHANGELOG.md](CHANGELOG.md) : historique des versions
+- [ROADMAP.md](ROADMAP.md) : fonctionnalités restantes
 
 ---
 
