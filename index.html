@@ -544,7 +544,7 @@
 </div>
 
 <script>
-const APP_VERSION = "1.6.1";
+const APP_VERSION = "1.7.0";
 const debugLogs = [];
 let debugModeEnabled = false;
 </script>
@@ -761,17 +761,18 @@ class App {
     this.saveData('items', this.items);
   }
 
-  addHomework(subject, content, dueDate, sourceDate = null) {
+  addHomework(subject, content, dueDate, sourceDate = null, done = false) {
+    const today = new Date().toISOString().split('T')[0];
     this.items.push({
       id: generateId(),
       type: 'homework',
       subject,
       content,
       dueDate,
-      createdDate: new Date().toISOString().split('T')[0],
+      createdDate: today,
       sourceDate,
-      done: false,
-      doneDate: null
+      done,
+      doneDate: done ? today : null
     });
     this.saveData('items', this.items);
   }
@@ -1077,7 +1078,10 @@ async function startOCR() {
     // la redemander. La case "C'est une leçon" (aperçu) fait l'exception.
     ocrParsedCourses.forEach(c => {
       c.isHomework = true;
-      c.dueDate = parseOcrDateToISO(c.date);
+      const parsedDue = parseOcrDateToISO(c.date);
+      c.dueDate = isValidISODate(parsedDue) ? parsedDue : null;
+      c.dueDateInvalid = !c.dueDate;
+      c.doneFromStatus = /^fait$/i.test((c.status || '').trim());
     });
 
     addDebugLog(`${ocrParsedCourses.length} cours parsés:`, 'info');
@@ -1158,6 +1162,28 @@ function parseOcrDateToISO(frenchDateStr) {
   return d.toISOString().split('T')[0];
 }
 
+// Valide qu'une chaîne est une vraie date ISO (YYYY-MM-DD) correspondant à un jour
+// calendaire réel. Sert de garde-fou avant toute sauvegarde: parseOcrDateToISO peut
+// renvoyer null si l'OCR n'a pas produit un format reconnaissable, et il ne faut
+// jamais laisser passer autre chose qu'une date valide ou null jusqu'à app.items.
+function isValidISODate(str) {
+  if (typeof str !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(str)) return false;
+  const d = new Date(str + 'T00:00:00Z');
+  return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === str;
+}
+
+// Une carte "J'ai terminé" (case à cocher de complétion, présente sur chaque carte
+// de l'appli ado) ne doit jamais être confondue avec du contenu de cours. L'OCR la
+// rend de façon inconsistante ("( J'ai terminé", "@ ai terminé"...) donc on repère
+// la phrase-clé sur une ligne courte plutôt que d'ancrer un préfixe précis.
+const OCR_DONE_CHECKBOX_REGEX = /ai\s+termin[ée]/i;
+function isDoneCheckboxLine(line) {
+  return line.length <= 20 && OCR_DONE_CHECKBOX_REGEX.test(line);
+}
+
+// Mots-clés indiquant un contrôle/DS plutôt qu'une leçon ou un devoir classique.
+const EXAM_KEYWORD_REGEX = /^(DS|contr[ôo]le|évaluation|interrogation|devoir\s+surveill[ée])\b/i;
+
 // Reconnaissance PURE: extrait les cours du texte OCR, sans aucune notion de doublon.
 // Une ligne de cours est reconnue par son SUFFIXE ("Fait"/"Non Fait"), pas par son
 // préfixe (majuscules), pour ne pas confondre une description qui commence par des
@@ -1169,15 +1195,24 @@ function parseOCRFormat(text) {
   let currentCourse = null;
 
   const dateRegex = /^Pour\s+(.+?)\.?\s*$/i;
+  // Une consigne réelle peut commencer par "Pour" (ex: "Pour les absents:
+  // Terminer le..."). On n'accepte l'en-tête de date que si le texte capturé
+  // se termine bien par un jour+mois ("29 sept"), sinon dateRegex matcherait
+  // n'importe quelle phrase de contenu commençant par "Pour".
+  const dateContentRegex = /\d{1,2}\s+[a-zéèêëàâäîïôöùûüç]+\.?$/i;
   const courseRegex = /^[|│├─●◆▪▌]?\s*(.+?)\s+(Non\s*Fait|Fait)\s*$/i;
   const standaloneStateRegex = /^(Non\s*Fait|Fait)$/i;
 
   function finalizeCourse() {
     if (currentCourse) {
+      const content = currentCourse.contentLines.filter(l => l).join(' ').trim()
+        || '(Cours vu, aucune consigne notée)';
       courses.push({
         date: currentCourse.date,
         subject: currentCourse.subject,
-        content: currentCourse.contentLines.filter(l => l).join(' ').trim(),
+        status: currentCourse.status || null,
+        content,
+        isExam: EXAM_KEYWORD_REGEX.test(content),
         id: `ocr-${Date.now()}-${Math.random()}`
       });
       currentCourse = null;
@@ -1188,9 +1223,19 @@ function parseOCRFormat(text) {
     if (!line) continue;
 
     const dateMatch = line.match(dateRegex);
-    if (dateMatch) {
+    if (dateMatch && dateContentRegex.test(dateMatch[1].trim())) {
       finalizeCourse();
       currentDate = dateMatch[1].trim();
+      continue;
+    }
+
+    // L'état isolé est testé avant la ligne combinée matière+état: une ligne
+    // "Non Fait" seule matcherait sinon courseRegex avec sujet="Non" (le
+    // groupe non-gourmand accepte "Non" comme "sujet" suivi de "Fait").
+    if (standaloneStateRegex.test(line)) {
+      if (currentCourse && !currentCourse.status) {
+        currentCourse.status = line.trim();
+      }
       continue;
     }
 
@@ -1200,13 +1245,14 @@ function parseOCRFormat(text) {
       currentCourse = {
         date: currentDate,
         subject: courseMatch[1].trim(),
+        status: courseMatch[2].trim(),
         contentLines: []
       };
       continue;
     }
 
-    // Artefact OCR: état seul sur sa ligne, sans matière → ignoré
-    if (standaloneStateRegex.test(line)) {
+    // Case "J'ai terminé": bruit d'interface, jamais du contenu de cours
+    if (isDoneCheckboxLine(line)) {
       continue;
     }
 
@@ -1221,7 +1267,22 @@ function parseOCRFormat(text) {
   return courses;
 }
 
+// L'examen n'a ni `subject` ni `sourceDate` dans le modèle de données (seulement
+// name+dueDate): on combine la matière et le contenu OCR dans un nom unique pour
+// pouvoir le dédoublonner comme les autres cours importés.
+function buildExamName(course) {
+  return `${course.subject} — ${course.content}`;
+}
+
 function checkDuplicate(course) {
+  if (course.isExam) {
+    const examName = buildExamName(course);
+    return app.items.some(item =>
+      item.type === 'exam' &&
+      item.name.toLowerCase() === examName.toLowerCase() &&
+      item.dueDate === course.dueDate
+    );
+  }
   const targetType = course.isHomework ? 'homework' : 'daily';
   return app.items.some(item => {
     if (item.type !== targetType) return false;
@@ -1266,12 +1327,22 @@ function addOCRCourses(courses) {
 
   let addedCount = 0;
   let skippedCount = 0;
+  let errorCount = 0;
 
+  // isHomework peut avoir été basculé à false ("C'est une leçon", cf confirmOCR)
+  // après le calcul de dueDateInvalid: une leçon n'a pas d'échéance et n'est donc
+  // jamais concernée par cette erreur, même si la date OCR était illisible.
   uniqueBatch.forEach(course => {
-    if (checkDuplicate(course)) {
+    const needsDueDate = course.isExam || course.isHomework;
+    if (needsDueDate && course.dueDateInvalid) {
+      errorCount++;
+    } else if (checkDuplicate(course)) {
       skippedCount++;
+    } else if (course.isExam) {
+      app.addExam(buildExamName(course), course.dueDate);
+      addedCount++;
     } else if (course.isHomework) {
-      app.addHomework(course.subject, course.content, course.dueDate, course.date);
+      app.addHomework(course.subject, course.content, course.dueDate, course.date, course.doneFromStatus);
       addedCount++;
     } else {
       app.addDaily(course.subject, course.content, course.date);
@@ -1279,7 +1350,7 @@ function addOCRCourses(courses) {
     }
   });
 
-  return { addedCount, skippedCount };
+  return { addedCount, skippedCount, errorCount };
 }
 
 function displayOCRResults(courses) {
@@ -1287,24 +1358,42 @@ function displayOCRResults(courses) {
   let html = '';
 
   courses.forEach((course, idx) => {
-    const warningClass = course.isDuplicate ? 'border-left: 4px solid var(--color-critical);' : '';
-    const warningText = course.isDuplicate ? '⚠️ Doublon détecté' : '';
+    const warningClass = (course.isDuplicate || course.dueDateInvalid) ? 'border-left: 4px solid var(--color-critical);' : '';
+    let warningText = '';
+    if (course.dueDateInvalid) {
+      warningText = '⚠️ Date d\'échéance non reconnue — ne sera pas ajoutée';
+    } else if (course.isDuplicate) {
+      warningText = '⚠️ Doublon détecté';
+    }
 
-    const dueDateText = course.dueDate ? app.formatDate(course.dueDate) : course.date;
+    const statusNote = course.doneFromStatus
+      ? `<div class="card-meta" style="color: var(--color-accent);">Statut scan: Fait ✅</div>`
+      : '';
+
+    const dueDateText = course.dueDateInvalid ? '?' : app.formatDate(course.dueDate);
+    let footer;
+    if (course.isExam) {
+      footer = `<div class="card-meta" style="margin-top: 4px; color: var(--color-accent);">📅 Contrôle détecté — échéance: ${dueDateText}</div>`;
+    } else {
+      footer = `
+        <div class="tabs" style="margin-top: 12px;">
+          <button class="${course.isHomework ? 'active' : ''}" id="ocrTypeHomework-${idx}" onclick="setOCRType(${idx}, true)">📝 Devoir</button>
+          <button class="${course.isHomework ? '' : 'active'}" id="ocrTypeLesson-${idx}" onclick="setOCRType(${idx}, false)">📚 Leçon</button>
+        </div>
+        <div id="ocrHomeworkInfo-${idx}" class="card-meta" style="margin-top: 8px; color: var(--color-accent); display: ${course.isHomework ? 'block' : 'none'};">
+          📝 Devoir — échéance: ${dueDateText}
+        </div>
+      `;
+    }
 
     html += `
       <div class="card" style="${warningClass}">
         <div class="card-title">${course.subject}</div>
         <div class="card-meta">Date: ${course.date}</div>
         <div class="card-meta">${course.content}</div>
+        ${statusNote}
         ${warningText ? `<div style="color: var(--color-critical); font-weight: 600; margin-top: 8px;">${warningText}</div>` : ''}
-        <label style="display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 14px; cursor: pointer;">
-          <input type="checkbox" id="ocrLesson-${idx}" onchange="toggleOCRLessonInfo(${idx})">
-          ✅ C'est une leçon (pas un devoir)
-        </label>
-        <div id="ocrHomeworkInfo-${idx}" class="card-meta" style="margin-top: 4px; color: var(--color-accent);">
-          📝 Devoir — échéance: ${dueDateText}
-        </div>
+        ${footer}
       </div>
     `;
   });
@@ -1312,24 +1401,25 @@ function displayOCRResults(courses) {
   list.innerHTML = html;
 }
 
-function toggleOCRLessonInfo(idx) {
-  const checkbox = document.getElementById(`ocrLesson-${idx}`);
-  document.getElementById(`ocrHomeworkInfo-${idx}`).style.display = checkbox.checked ? 'none' : 'block';
+// Bascule matière du type d'un cours dans l'aperçu OCR (pilule "Devoir"/"Leçon",
+// même pattern visuel que la barre d'onglets .tabs). Met à jour ocrParsedCourses
+// directement au clic: confirmOCR() n'a donc plus besoin de relire l'état du DOM.
+function setOCRType(idx, isHomework) {
+  ocrParsedCourses[idx].isHomework = isHomework;
+  document.getElementById(`ocrTypeHomework-${idx}`).classList.toggle('active', isHomework);
+  document.getElementById(`ocrTypeLesson-${idx}`).classList.toggle('active', !isHomework);
+  document.getElementById(`ocrHomeworkInfo-${idx}`).style.display = isHomework ? 'block' : 'none';
 }
 
 function confirmOCR() {
-  for (let idx = 0; idx < ocrParsedCourses.length; idx++) {
-    const checkbox = document.getElementById(`ocrLesson-${idx}`);
-    if (checkbox && checkbox.checked) {
-      ocrParsedCourses[idx].isHomework = false;
-    }
-  }
-
-  const { addedCount, skippedCount } = addOCRCourses(ocrParsedCourses);
+  const { addedCount, skippedCount, errorCount } = addOCRCourses(ocrParsedCourses);
 
   let message = `✅ ${addedCount} cours ajouté${addedCount > 1 ? 's' : ''}!`;
   if (skippedCount > 0) {
     message += ` (${skippedCount} doublon${skippedCount > 1 ? 's' : ''} ignoré${skippedCount > 1 ? 's' : ''})`;
+  }
+  if (errorCount > 0) {
+    message += ` (${errorCount} carte${errorCount > 1 ? 's' : ''} ignorée${errorCount > 1 ? 's' : ''} — date d'échéance non reconnue)`;
   }
   app.showFeedback(message);
 

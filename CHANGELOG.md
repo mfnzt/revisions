@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.7.0 — Adaptation OCR au format carte de l'appli ado + fiabilisation
+Le format de scan de l'appli ado (matière + badge Fait/Non Fait sur la même
+ligne, checkbox "J'ai terminé" sur chaque carte, cartes sans consigne,
+pièce jointe PDF référencée en texte) cassait le parsing prévu pour le
+"format collège" initial :
+- fix d'un bug latent où une ligne de statut isolée (`"Non Fait"`) pouvait
+  être mal découpée par `courseRegex` en sujet="Non" + statut="Fait" —
+  l'état isolé est désormais testé en priorité et attaché au cours en
+  cours de construction au lieu d'être ignoré ;
+- nouveau filtre pour la checkbox "J'ai terminé" (rendue de façon
+  inconsistante par l'OCR: `"( J'ai terminé"`, `"@ ai terminé"`...),
+  jamais confondue avec du contenu de cours ;
+- une carte sans aucune consigne (cours vu, ex. "HISTOIRE-GEOGRAPHIE /
+  Fait" sans texte) est importée avec un contenu placeholder plutôt
+  qu'ignorée ;
+- détection d'un mot-clé de contrôle (DS, contrôle, évaluation,
+  interrogation...) en début de contenu → crée un item `exam` (cycle
+  SM-2 jusqu'à l'échéance) au lieu d'un simple devoir ;
+- le badge "Fait" du scan pré-remplit `done: true` / `doneDate` pour un
+  devoir importé (nouveau paramètre optionnel sur `app.addHomework`) ;
+- **validation stricte de la date d'échéance avant sauvegarde**
+  (`isValidISODate`) : si `parseOcrDateToISO` échoue, la carte est
+  clairement signalée "date non reconnue" dans l'aperçu et n'est jamais
+  ajoutée avec une échéance invalide — auparavant le fallback d'affichage
+  pouvait laisser croire qu'un texte brut était une date d'échéance.
+
 ## v1.6.1 — Inversion défaut DM/leçon en OCR
 Chaque carte importée est devoir par défaut (case "C'est une leçon" pour
 l'exception). Date d'échéance dérivée automatiquement de la date OCR
