@@ -23,3 +23,6 @@ build/
 # Logs
 *.log
 logs/
+
+# Claude Code (préférences locales, pas à partager)
+.claude/settings.local.json
